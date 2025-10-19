@@ -63,22 +63,31 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-            update_status(f"Loading face swapper model from: {model_path}", NAME)
-            try:
-                # Ensure the providers list is correctly passed
-                providers = modules.globals.execution_providers
-                # print(f"Attempting to load model with providers: {providers}") # Debug print
-                FACE_SWAPPER = insightface.model_zoo.get_model(
-                    model_path, providers=providers
-                )
-                update_status("Face swapper model loaded successfully.", NAME)
-            except Exception as e:
-                update_status(f"Error loading face swapper model: {e}", NAME)
-                # print traceback maybe?
-                # import traceback
-                # traceback.print_exc()
-                FACE_SWAPPER = None # Ensure it remains None on failure
+            # Try different models in order of preference
+            model_files = [
+                "ghost_256_fp16.onnx",
+                "hyperswap_128_fp16.onnx", 
+                "simswap_256_fp16.onnx",
+                "inswapper_128_fp16.onnx"
+            ]
+            
+            for model_file in model_files:
+                model_path = os.path.join(models_dir, model_file)
+                if os.path.exists(model_path):
+                    update_status(f"Loading face swapper model from: {model_path}", NAME)
+                    try:
+                        providers = modules.globals.execution_providers
+                        FACE_SWAPPER = insightface.model_zoo.get_model(
+                            model_path, providers=providers
+                        )
+                        update_status(f"Face swapper model {model_file} loaded successfully.", NAME)
+                        break
+                    except Exception as e:
+                        update_status(f"Error loading {model_file}: {e}", NAME)
+                        continue
+            
+            if FACE_SWAPPER is None:
+                update_status("No compatible face swapper model found.", NAME)
                 return None
     return FACE_SWAPPER
 
