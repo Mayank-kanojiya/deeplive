@@ -126,9 +126,16 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
     # Apply the face swap
     try:
-        swapped_frame_raw = face_swapper.get(
-            temp_frame, target_face, source_face, paste_back=True
-        )
+        # Check if model supports paste_back parameter
+        try:
+            swapped_frame_raw = face_swapper.get(
+                temp_frame, target_face, source_face, paste_back=True
+            )
+        except TypeError:
+            # Fallback for models that don't support paste_back (like SimSwap)
+            swapped_frame_raw = face_swapper.get(
+                temp_frame, target_face, source_face
+            )
 
         # --- START: CRITICAL FIX FOR ORT 1.17 ---
         # Check the output type and range from the model
