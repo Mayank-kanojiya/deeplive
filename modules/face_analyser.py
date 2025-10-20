@@ -19,23 +19,74 @@ def get_face_analyser() -> Any:
     global FACE_ANALYSER
 
     if FACE_ANALYSER is None:
-        FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=modules.globals.execution_providers)
-        FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+        try:
+            FACE_ANALYSER = insightface.app.FaceAnalysis(
+                name='buffalo_l', 
+                providers=modules.globals.execution_providers
+            )
+            FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+        except Exception as e:
+            print(f"Error initializing face analyzer: {e}")
+            # Try with CPU provider as fallback
+            try:
+                FACE_ANALYSER = insightface.app.FaceAnalysis(
+                    name='buffalo_l', 
+                    providers=['CPUExecutionProvider']
+                )
+                FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+            except Exception as e2:
+                print(f"Failed to initialize face analyzer even with CPU: {e2}")
+                return None
     return FACE_ANALYSER
 
 
 def get_one_face(frame: Frame) -> Any:
-    face = get_face_analyser().get(frame)
+    if frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:
+        return None
+        
+    # Ensure frame is in proper format
+    if len(frame.shape) != 3 or frame.shape[2] != 3:
+        return None
+        
+    # Ensure frame is uint8
+    if frame.dtype != np.uint8:
+        frame = np.clip(frame, 0, 255).astype(np.uint8)
+        
+    # Ensure frame is contiguous
+    if not frame.flags['C_CONTIGUOUS']:
+        frame = np.ascontiguousarray(frame)
+    
     try:
-        return min(face, key=lambda x: x.bbox[0])
-    except ValueError:
+        face = get_face_analyser().get(frame)
+        if face and len(face) > 0:
+            return min(face, key=lambda x: x.bbox[0])
+        return None
+    except Exception as e:
+        print(f"Error in face analysis: {e}")
         return None
 
 
 def get_many_faces(frame: Frame) -> Any:
+    if frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:
+        return None
+        
+    # Ensure frame is in proper format
+    if len(frame.shape) != 3 or frame.shape[2] != 3:
+        return None
+        
+    # Ensure frame is uint8
+    if frame.dtype != np.uint8:
+        frame = np.clip(frame, 0, 255).astype(np.uint8)
+        
+    # Ensure frame is contiguous
+    if not frame.flags['C_CONTIGUOUS']:
+        frame = np.ascontiguousarray(frame)
+    
     try:
-        return get_face_analyser().get(frame)
-    except IndexError:
+        faces = get_face_analyser().get(frame)
+        return faces if faces else None
+    except Exception as e:
+        print(f"Error in face analysis: {e}")
         return None
 
 def has_valid_map() -> bool:

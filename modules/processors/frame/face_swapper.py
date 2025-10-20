@@ -108,66 +108,71 @@ def get_face_swapper() -> Any:
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     face_swapper = get_face_swapper()
     if face_swapper is None:
-        update_status("Face swapper model not loaded or failed to load. Skipping swap.", NAME)
-        return temp_frame # Return original frame if model failed or not loaded
+        return temp_frame
 
-    # Check if target face is female (gender: 0=female, 1=male)
-    if hasattr(target_face, 'gender') and target_face.gender != 0:
-        return temp_frame  # Skip swap if not female
+    # Validate inputs more thoroughly
+    if source_face is None or target_face is None or temp_frame is None:
+        return temp_frame
+    
+    if not isinstance(temp_frame, np.ndarray) or temp_frame.size == 0:
+        return temp_frame
+        
+    # Validate face objects have required attributes
+    if not hasattr(source_face, 'embedding') or not hasattr(target_face, 'kps'):
+        return temp_frame
+        
+    if source_face.embedding is None or target_face.kps is None:
+        return temp_frame
 
-    # Store a copy of the original frame before swapping for opacity blending
+    # Store a copy of the original frame
     original_frame = temp_frame.copy()
 
-    # --- Pre-swap Input Check (Optional but good practice) ---
+    # Ensure frame is proper format
     if temp_frame.dtype != np.uint8:
-        # print(f"Warning: Input frame is {temp_frame.dtype}, converting to uint8 before swap.")
         temp_frame = np.clip(temp_frame, 0, 255).astype(np.uint8)
-    # --- End Input Check ---
+    
+    if not temp_frame.flags['C_CONTIGUOUS']:
+        temp_frame = np.ascontiguousarray(temp_frame)
 
-    # Apply the face swap
+    # Apply the face swap with comprehensive error handling
     try:
-        # Check if model supports paste_back parameter
+        # Try with paste_back parameter first, fallback without it
         try:
             swapped_frame_raw = face_swapper.get(
                 temp_frame, target_face, source_face, paste_back=True
             )
         except TypeError:
-            # Fallback for models that don't support paste_back (like SimSwap)
+            # Model doesn't support paste_back parameter
             swapped_frame_raw = face_swapper.get(
                 temp_frame, target_face, source_face
             )
 
-        # --- START: CRITICAL FIX FOR ORT 1.17 ---
-        # Check the output type and range from the model
+        # Validate output
         if swapped_frame_raw is None:
-             # print("Warning: face_swapper.get returned None.") # Debug
-             return original_frame # Return original if swap somehow failed internally
+             return original_frame
 
-        # Ensure the output is a numpy array
         if not isinstance(swapped_frame_raw, np.ndarray):
-            # print(f"Warning: face_swapper.get returned type {type(swapped_frame_raw)}, expected numpy array.") # Debug
             return original_frame
 
-        # Ensure the output has the correct shape (like the input frame)
         if swapped_frame_raw.shape != temp_frame.shape:
-             # print(f"Warning: Swapped frame shape {swapped_frame_raw.shape} differs from input {temp_frame.shape}.") # Debug
-             # Attempt resize (might distort if aspect ratio changed, but better than crashing)
              try:
                  swapped_frame_raw = cv2.resize(swapped_frame_raw, (temp_frame.shape[1], temp_frame.shape[0]))
-             except Exception as resize_e:
-                 # print(f"Error resizing swapped frame: {resize_e}") # Debug
+             except:
                  return original_frame
 
-        # Explicitly clip values to 0-255 and convert to uint8
-        # This handles cases where the model might output floats or values outside the valid range
+        # Ensure valid data range and type
+        if not np.isfinite(swapped_frame_raw).all():
+            return original_frame
+            
         swapped_frame = np.clip(swapped_frame_raw, 0, 255).astype(np.uint8)
-        # --- END: CRITICAL FIX FOR ORT 1.17 ---
+        
+        # Final validation
+        if not swapped_frame.flags['C_CONTIGUOUS']:
+            swapped_frame = np.ascontiguousarray(swapped_frame)
 
     except Exception as e:
-        print(f"Error during face swap using face_swapper.get: {e}") # More specific error
-        # import traceback
-        # traceback.print_exc() # Print full traceback for debugging
-        return original_frame # Return original if swap fails
+        print(f"Error during face swap using face_swapper.get: {e}")
+        return original_frame
 
     # --- Post-swap Processing (Masking, Opacity, etc.) ---
     # Now, work with the guaranteed uint8 'swapped_frame'
@@ -484,22 +489,26 @@ def process_frames(
             # Log the error but allow proceeding; subsequent check will stop processing.
         else:
             try:
-                source_img = cv2.imread(source_path)
+                source_img = cv2.imread(source_path, cv2.IMREAD_COLOR)
                 if source_img is None:
-                    # Specific error for file reading failure
                     update_status(f"Error reading source image file {source_path}. Please check the path and file integrity.", NAME)
                 else:
-                    source_face = get_one_face(source_img)
-                    if source_face is None:
-                        # Specific message for no face detected after successful read
-                        update_status(f"Warning: Successfully read source image {source_path}, but no face was detected. Swaps will be skipped.", NAME)
+                    # Ensure image is in proper format
+                    if len(source_img.shape) == 3 and source_img.shape[2] == 3:
+                        # Convert BGR to RGB if needed and ensure proper format
+                        source_img = cv2.cvtColor(source_img, cv2.COLOR_BGR2RGB)
+                        source_img = cv2.cvtColor(source_img, cv2.COLOR_RGB2BGR)  # Back to BGR for consistency
+                        
+                        source_face = get_one_face(source_img)
+                        if source_face is None:
+                            update_status(f"Warning: Successfully read source image {source_path}, but no face was detected. Swaps will be skipped.", NAME)
+                    else:
+                        update_status(f"Error: Source image {source_path} is not in proper RGB format.", NAME)
             except Exception as e:
-                # Print the specific exception caught
                 import traceback
                 print(f"{NAME}: Caught exception during source image processing for {source_path}:")
-                traceback.print_exc() # Print the full traceback
+                traceback.print_exc()
                 update_status(f"Error during source image reading or analysis {source_path}: {e}", NAME)
-                # Log general exception during the process
 
     total_frames = len(temp_frame_paths)
     # update_status(f"Processing {total_frames} frames. Use V2 (map_faces): {use_v2}", NAME) # Optional Debug
@@ -519,13 +528,26 @@ def process_frames(
     for i, temp_frame_path in enumerate(temp_frame_paths):
         # update_status(f"Processing frame {i+1}/{total_frames}: {os.path.basename(temp_frame_path)}", NAME) # Optional Debug
 
-        # Read the target frame
+        # Read the target frame with enhanced error handling
         try:
+            # Check if file exists and is readable
+            if not os.path.exists(temp_frame_path) or not os.path.isfile(temp_frame_path):
+                print(f"{NAME}: Error: Frame file does not exist: {temp_frame_path}, skipping.")
+                if progress: progress.update(1)
+                continue
+                
             temp_frame = cv2.imread(temp_frame_path)
             if temp_frame is None:
                 print(f"{NAME}: Error: Could not read frame: {temp_frame_path}, skipping.")
                 if progress: progress.update(1)
-                continue # Skip this frame if read fails
+                continue
+                
+            # Validate frame data
+            if temp_frame.size == 0 or not isinstance(temp_frame, np.ndarray):
+                print(f"{NAME}: Error: Invalid frame data: {temp_frame_path}, skipping.")
+                if progress: progress.update(1)
+                continue
+                
         except Exception as read_e:
             print(f"{NAME}: Error reading frame {temp_frame_path}: {read_e}, skipping.")
             if progress: progress.update(1)

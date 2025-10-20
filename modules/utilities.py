@@ -162,9 +162,31 @@ def clean_temp(target_path: str) -> None:
     temp_directory_path = get_temp_directory_path(target_path)
     parent_directory_path = os.path.dirname(temp_directory_path)
     if not modules.globals.keep_frames and os.path.isdir(temp_directory_path):
-        shutil.rmtree(temp_directory_path)
-    if os.path.exists(parent_directory_path) and not os.listdir(parent_directory_path):
-        os.rmdir(parent_directory_path)
+        try:
+            # Force remove read-only files and handle permission issues
+            for root, dirs, files in os.walk(temp_directory_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        os.chmod(file_path, 0o777)
+                        os.remove(file_path)
+                    except:
+                        pass
+                for dir in dirs:
+                    dir_path = os.path.join(root, dir)
+                    try:
+                        os.chmod(dir_path, 0o777)
+                    except:
+                        pass
+            shutil.rmtree(temp_directory_path, ignore_errors=True)
+        except Exception as e:
+            print(f"Warning: Could not fully clean temp directory {temp_directory_path}: {e}")
+    if os.path.exists(parent_directory_path):
+        try:
+            if not os.listdir(parent_directory_path):
+                os.rmdir(parent_directory_path)
+        except:
+            pass
 
 
 def has_image_extension(image_path: str) -> bool:
