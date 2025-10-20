@@ -63,13 +63,26 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            # Try different models in order of preference
-            model_files = [
-                "simswap_256_fp16.onnx",
-                "ghost_256_fp16.onnx",
-                "hyperswap_128_fp16.onnx", 
-                "inswapper_128_fp16.onnx"
-            ]
+            model_map = {
+                'inswapper': 'inswapper_128_fp16.onnx',
+                'simswap': 'simswap_256_fp16.onnx', 
+                'ghost': 'ghost_256_fp16.onnx',
+                'hyperswap': 'hyperswap_128_fp16.onnx'
+            }
+            
+            selected_model = getattr(modules.globals, 'face_swap_model', 'auto')
+            
+            if selected_model == 'auto':
+                # Auto mode: try models in order of preference
+                model_files = [
+                    "simswap_256_fp16.onnx",
+                    "ghost_256_fp16.onnx", 
+                    "hyperswap_128_fp16.onnx",
+                    "inswapper_128_fp16.onnx"
+                ]
+            else:
+                # Use specific model
+                model_files = [model_map.get(selected_model, 'inswapper_128_fp16.onnx')]
             
             for model_file in model_files:
                 model_path = os.path.join(models_dir, model_file)
