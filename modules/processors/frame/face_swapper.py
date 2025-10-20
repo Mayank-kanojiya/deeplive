@@ -65,9 +65,9 @@ def get_face_swapper() -> Any:
         if FACE_SWAPPER is None:
             # Try different models in order of preference
             model_files = [
+                "simswap_256_fp16.onnx",
                 "ghost_256_fp16.onnx",
                 "hyperswap_128_fp16.onnx", 
-                "simswap_256_fp16.onnx",
                 "inswapper_128_fp16.onnx"
             ]
             
