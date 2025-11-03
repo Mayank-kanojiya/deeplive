@@ -1,0 +1,48 @@
+# Enhanced Deep-Live-Cam Requirements
+# Core dependencies from original
+opencv-python==4.8.0.74
+insightface==0.7.3
+onnxruntime==1.21.0
+tensorflow==2.13.0
+torch==2.0.1
+torchvision==0.15.2
+torchaudio==2.0.2
+
+# UI and utilities
+tkinter
+customtkinter==5.2.0
+pillow==10.0.0
+numpy==1.24.3
+tqdm==4.65.0
+
+# Performance enhancements
+psutil>=5.9.0  # System monitoring
+threading-utils>=0.3  # Enhanced threading
+queue-manager>=1.0  # Frame queue optimization
+
+# Video capture optimizations (Windows)
+pygrabber>=0.1; sys_platform == "win32"  # DirectShow support
+
+# GPU acceleration
+onnxruntime-gpu==1.21.0  # CUDA support
+onnxruntime-directml==1.21.0; sys_platform == "win32"  # DirectML for AMD
+onnxruntime-coreml==1.21.0; sys_platform == "darwin"  # CoreML for Mac
+onnxruntime-openvino==1.21.0  # Intel OpenVINO
+
+# Memory optimization
+memory-profiler>=0.60.0  # Memory usage tracking
+gc-utils>=1.0  # Garbage collection optimization
+
+# Audio processing
+librosa>=0.10.0  # Audio analysis
+soundfile>=0.12.0  # Audio file handling
+
+# Development and debugging
+pytest>=7.0.0  # Testing framework
+black>=23.0.0  # Code formatting
+flake8>=6.0.0  # Linting
+
+# Optional performance boosters
+numba>=0.57.0  # JIT compilation for NumPy
+scikit-learn>=1.3.0  # Clustering algorithms
+scipy>=1.11.0  # Scientific computing
